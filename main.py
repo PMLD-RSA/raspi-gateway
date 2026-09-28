@@ -48,11 +48,11 @@ MQTT_TOPIC = f"hospital/{TANK_ID}/level"
 PORT = "/dev/serial0"   # UART0 Raspberry Pi
 
 # Register E220 — 6 byte (ADDH ADDL REG0 REG1 REG2 REG3)
-# Harus sama persis dengan konfigurasi STM32 / pengirim!
+# Harus sama persis dengan LORA_CFG di src/main.cpp (STM32 / pengirim)!
 #
 #   ADDH 0x00, ADDL 0x00 → alamat modul 0x0000
 #   REG0 0x62 → UART 9600 bps, 8N1, air rate 2.4 kbps
-#   REG1 0x03 → sub-packet 240B, TX power 10 dBm
+#   REG1 0x03 → sub-packet 200B, TX power 10 dBm
 #               (sengaja diturunkan karena antena 433 MHz dipakai untuk uji coba
 #                pada modul 900 MHz — kembalikan ke 0x00 = 22 dBm setelah
 #                antena 915 MHz terpasang)
@@ -121,6 +121,9 @@ def konfigurasi_lora(ser: serial.Serial) -> bool:
 
     if register_terbaca != LORA_CFG:
         print("[LoRa] Konfigurasi berbeda, menulis ulang...")
+        # Modul balas FF FF FF kalau tulis dikirim langsung setelah baca
+        time.sleep(0.05)
+        tunggu_aux()
         # Perintah tulis permanen: C0 ADDR LEN + DATA
         ser.write(bytes([0xC0, 0x00, n]) + LORA_CFG)
         resp = ser.read(3 + n)
@@ -143,48 +146,35 @@ def konfigurasi_lora(ser: serial.Serial) -> bool:
 # =============================================================================
 
 try:
-    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)  # paho-mqtt 2.x
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)  # paho-mqtt 2.x
 except AttributeError:
     mqtt_client = mqtt.Client()  # paho-mqtt 1.x (mis. dari apt)
-_mqtt_connected = False
 
 
-def _on_connect(client, userdata, flags, rc):
-    global _mqtt_connected
+# Signature dibuat cocok untuk paho-mqtt 1.x maupun 2.x (callback API v2)
+def _on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
-        _mqtt_connected = True
         print("[MQTT] Terhubung ke broker.")
     else:
         print(f"[MQTT] Gagal terhubung, kode: {rc}")
 
 
-def _on_disconnect(client, userdata, rc):
-    global _mqtt_connected
-    _mqtt_connected = False
-    print("[MQTT] Terputus dari broker.")
+def _on_disconnect(client, userdata, *args):
+    print("[MQTT] Terputus dari broker, loop_start() akan menyambung ulang otomatis.")
 
 
 def connect_mqtt():
     mqtt_client.on_connect    = _on_connect
     mqtt_client.on_disconnect = _on_disconnect
     print(f"[MQTT] Menghubungi {MQTT_BROKER}:{MQTT_PORT} ...")
+    # connect_async: tidak crash kalau broker belum bisa dijangkau saat start
     mqtt_client.connect_async(MQTT_BROKER, MQTT_PORT, keepalive=60)
     mqtt_client.loop_start()   # background thread → reconnect otomatis
     time.sleep(1.0)            # beri waktu handshake selesai
 
 
 def publish_payload(payload: dict):
-    """Kirim payload JSON ke MQTT. Coba reconnect bila terputus."""
-    global _mqtt_connected
-    if not _mqtt_connected:
-        print("[MQTT] Belum terhubung, mencoba reconnect...")
-        try:
-            mqtt_client.reconnect()
-            time.sleep(1.0)
-        except Exception as e:
-            print(f"[MQTT] Reconnect gagal: {e}")
-            return
-
+    """Kirim payload JSON ke MQTT. Reconnect ditangani loop_start()."""
     message = json.dumps(payload)
     result  = mqtt_client.publish(MQTT_TOPIC, message, qos=1)
 
