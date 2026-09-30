@@ -1,4 +1,3 @@
-```python
 import json
 import time
 import serial
@@ -176,4 +175,4 @@ finally:
     mqtt_client.disconnect()
 
     print("[Gateway] Selesai.")
-```
+
