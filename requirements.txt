@@ -1,0 +1,4 @@
+gpiozero
+paho-mqtt
+pyserial
+python-dotenv

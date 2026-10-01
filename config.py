@@ -1,24 +1,48 @@
 """Konfigurasi terpusat untuk gateway Raspberry Pi.
 
-Ubah nilai di sini sesuai kebutuhan deployment — tidak perlu menyentuh
-file logika lainnya.
+Nilai sensitif (broker, UUID) dibaca dari environment variable.
+Buat file .env di root proyek berdasarkan .env.example, lalu isi nilainya.
+
+Nilai non-sensitif (pin GPIO, tinggi tangki, dll.) tetap hardcode di sini
+karena terikat langsung ke hardware dan tidak berubah antar deployment.
 """
 
+import os
+
+from dotenv import load_dotenv
+
+# Muat .env jika ada (development / Raspberry Pi dengan file .env)
+# Jika env var sudah di-set dari luar (misal systemd EnvironmentFile),
+# load_dotenv tidak akan menimpa nilai yang sudah ada.
+load_dotenv()
+
+
+def _wajib(key: str) -> str:
+    """Ambil env var; raise RuntimeError jika tidak ditemukan."""
+    nilai = os.getenv(key)
+    if not nilai:
+        raise RuntimeError(
+            f"Environment variable '{key}' belum di-set. "
+            f"Salin .env.example menjadi .env lalu isi nilainya."
+        )
+    return nilai
+
+
 # =============================================================================
-# MQTT
+# MQTT  —  nilai sensitif, dari .env
 # =============================================================================
 
-MQTT_BROKER = "100.94.192.102"
-MQTT_PORT   = 1883
+MQTT_BROKER = _wajib("MQTT_BROKER")
+MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
 
-TANK_ID        = "a6f5ade5-777c-4871-a584-de40d11df30d"
-SENSOR_NODE_ID = "6b464034-79f0-46fe-a7e4-7bd3b7fa9c8a"
+TANK_ID        = _wajib("TANK_ID")
+SENSOR_NODE_ID = _wajib("SENSOR_NODE_ID")
 
 MQTT_TOPIC = f"hospital/{TANK_ID}/level"
 
 
 # =============================================================================
-# TANGKI
+# TANGKI  —  terikat hardware, hardcode
 # =============================================================================
 
 TANK_HEIGHT_CM       = 100   # tinggi fisik tangki (cm)
@@ -26,7 +50,7 @@ TANK_CAPACITY_LITERS = 200   # kapasitas penuh tangki (liter)
 
 
 # =============================================================================
-# LoRa E220-900T22D
+# LoRa E220-900T22D  —  terikat hardware, hardcode
 # =============================================================================
 
 LORA_SERIAL_PORT = "/dev/serial0"   # UART0 Raspberry Pi
