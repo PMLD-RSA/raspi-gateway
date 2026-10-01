@@ -32,13 +32,18 @@ def _wajib(key: str) -> str:
 # MQTT  —  nilai sensitif, dari .env
 # =============================================================================
 
-MQTT_BROKER = _wajib("MQTT_BROKER")
-MQTT_PORT   = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_BROKER   = _wajib("MQTT_BROKER")
+MQTT_PORT     = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_USER     = os.getenv("MQTT_USER")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 
-TANK_ID        = _wajib("TANK_ID")
-SENSOR_NODE_ID = _wajib("SENSOR_NODE_ID")
+# =============================================================================
+# BACKEND SYNC API — Dynamic Provisioning
+# =============================================================================
 
-MQTT_TOPIC = f"hospital/{TANK_ID}/level"
+BACKEND_API_URL  = os.getenv("BACKEND_API_URL", "http://100.94.192.102:8000/api")
+GATEWAY_CODE     = os.getenv("GATEWAY_CODE", "GW-HUB-01")
+GATEWAY_SYNC_KEY = os.getenv("GATEWAY_SYNC_KEY", "secret_gateway_rsa_ugm_2026")
 
 
 # =============================================================================
