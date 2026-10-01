@@ -87,6 +87,13 @@ def main() -> None:
                 if jarak_cm > 0:
                     node_info = syncer.get_node(device_code)
 
+                    # Fallback jika STM32 masih mengirim format lama (DEFAULT)
+                    if not node_info and device_code == "DEFAULT" and syncer.mappings:
+                        # Ambil node pertama (misal: STM32-ATA)
+                        kode_fallback = next(iter(syncer.mappings))
+                        node_info = syncer.mappings[kode_fallback]
+                        device_code = kode_fallback
+
                     if not node_info:
                         print(f"[Gateway] Peringatan: Node '{device_code}' tidak terdaftar di mapping! Abaikan.")
                         continue
