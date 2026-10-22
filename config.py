@@ -66,13 +66,15 @@ LORA_BAUD        = 9600
 #
 #   ADDH 0x00, ADDL 0x00 → alamat modul 0x0000
 #   REG0 0x62             → UART 9600 bps, 8N1, air rate 2.4 kbps
-#   REG1 0x03             → TX power 10 dBm
-#                           (sengaja diturunkan: antena 433 MHz dipakai untuk
-#                            uji coba pada modul 900 MHz — kembalikan ke 0x00
-#                            = 22 dBm setelah antena 915 MHz terpasang)
-#   REG2 0x48             → channel 72 → 850.125 + 72 = 922.125 MHz
+#   REG1 0x00             → TX power 22 dBm (maksimal, sudah aman dengan antena 915 MHz)
+#                           [0x00 = 22 dBm, 0x01 = 17 dBm, 0x02 = 13 dBm, 0x03 = 10 dBm]
+#   REG2: Channel frekuensi (Frekuensi = 850.125 MHz + Channel * 1 MHz)
+#         - 0x41 (CH 65) → 850.125 + 65 = 915.125 MHz (Center 915 MHz)
+#         - 0x48 (CH 72) → 850.125 + 72 = 922.125 MHz (Standar AS923 / Regulasi ISM Indonesia)
 #   REG3 0x03             → mode transparan, LBT OFF
-LORA_CFG = bytes([0x00, 0x00, 0x62, 0x03, 0x48, 0x03])
+#
+# Default diset ke 0x41 (915.125 MHz) sesuai antena 915 MHz. Jika node STM32 memakai 922.125 MHz, ganti byte ke-5 menjadi 0x48.
+LORA_CFG = bytes([0x00, 0x00, 0x62, 0x00, 0x41, 0x03])
 
 # GPIO BCM numbering
 LORA_PIN_M0  = 23
