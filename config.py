@@ -74,6 +74,11 @@ LORA_BAUD        = 9600
 #   REG3 0x03             → mode transparan, LBT OFF
 #
 # Default diset ke 0x41 (915.125 MHz) sesuai antena 915 MHz. Jika node STM32 memakai 922.125 MHz, ganti byte ke-5 menjadi 0x48.
+#
+# Topologi dengan relay (lihat STM32-Sensor/src/main.cpp):
+#   STM node (CH 0x42) -> STM relay (0x0001, CH 0x42) -> Raspi (0x0000, CH 0x41)
+# STM memakai mode fixed transmission dan mengirim ke alamat 0x0000 CH 0x41,
+# jadi Raspi tetap transparan. Kalau CH Raspi diganti, ubah RASPI_CH di STM juga.
 LORA_CFG = bytes([0x00, 0x00, 0x62, 0x00, 0x41, 0x03])
 
 # GPIO BCM numbering
