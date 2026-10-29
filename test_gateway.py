@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 SERIAL_PORT = "/dev/serial0"
 BAUDRATE = 9600
 
-MQTT_HOST = "100.94.192.102"
+MQTT_HOST = "ubuntu-luis.tail7e12bf.ts.net"
 MQTT_PORT = 1883
 
 TANK_ID = "a6f5ade5-777c-4871-a584-de40d11df30d"

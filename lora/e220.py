@@ -69,7 +69,7 @@ class E220:
         self.tunggu_aux()
         self._m0.value = m0
         self._m1.value = m1
-        time.sleep(0.002)
+        time.sleep(0.1)     # Beri jeda 100ms agar modul stabil setelah pin mode berubah
         self.tunggu_aux()
 
     # ------------------------------------------------------------------
@@ -111,14 +111,25 @@ class E220:
 
         # Masuk mode konfigurasi (M0=1, M1=1) — UART wajib 9600 8N1
         self.set_mode(1, 1)
-        self._ser.reset_input_buffer()
+        time.sleep(0.05)
+        self.tunggu_aux()
 
-        # Perintah baca register: C1 ADDR LEN
-        self._ser.write(bytes([0xC1, 0x00, n]))
-        resp = self._ser.read(3 + n)
+        # Baca register dengan toleransi retry hingga 3 kali
+        resp = b""
+        for attempt in range(1, 4):
+            self._ser.reset_input_buffer()
+            # Perintah baca register: C1 ADDR LEN
+            self._ser.write(bytes([0xC1, 0x00, n]))
+            resp = self._ser.read(3 + n)
+
+            if len(resp) == 3 + n and resp[0] == 0xC1:
+                break
+            time.sleep(0.1)
+            self.tunggu_aux()
 
         if len(resp) != 3 + n or resp[0] != 0xC1:
             print(f"[E220] Gagal baca register (resp={resp.hex()})")
+            print("[E220] Tips: Pastikan pin M0 (GPIO23) dan M1 (GPIO24) terhubung ke HIGH/3.3V saat konfigurasi.")
             self.set_mode(0, 0)
             return False
 
@@ -146,6 +157,7 @@ class E220:
         # Kembali ke mode transmisi normal
         self.set_mode(0, 0)
         return True
+
 
     # ------------------------------------------------------------------
     # Terima data

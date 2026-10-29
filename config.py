@@ -41,7 +41,7 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 # BACKEND SYNC API — Dynamic Provisioning
 # =============================================================================
 
-BACKEND_API_URL  = os.getenv("BACKEND_API_URL", "http://100.94.192.102:8000/api")
+BACKEND_API_URL  = os.getenv("BACKEND_API_URL", "https://ubuntu-luis.tail7e12bf.ts.net/api")
 GATEWAY_CODE     = os.getenv("GATEWAY_CODE", "GW-HUB-01")
 GATEWAY_SYNC_KEY = os.getenv("GATEWAY_SYNC_KEY", "secret_gateway_rsa_ugm_2026")
 
