@@ -71,7 +71,7 @@ LORA_BAUD        = 9600
 #   REG2: Channel frekuensi (Frekuensi = 850.125 MHz + Channel * 1 MHz)
 #         - 0x41 (CH 65) → 850.125 + 65 = 915.125 MHz (Center 915 MHz)
 #         - 0x48 (CH 72) → 850.125 + 72 = 922.125 MHz (Standar AS923 / Regulasi ISM Indonesia)
-#   REG3 0x03             → mode transparan, LBT OFF
+#   REG3 0x43             → mode fixed transmission, LBT OFF, WOR 2000ms
 #
 # Default diset ke 0x41 (915.125 MHz) sesuai antena 915 MHz. Jika node STM32 memakai 922.125 MHz, ganti byte ke-5 menjadi 0x48.
 #
@@ -79,7 +79,7 @@ LORA_BAUD        = 9600
 #   STM node (CH 0x42) -> STM relay (0x0001, CH 0x42) -> Raspi (0x0000, CH 0x41)
 # STM memakai mode fixed transmission dan mengirim ke alamat 0x0000 CH 0x41,
 # jadi Raspi tetap transparan. Kalau CH Raspi diganti, ubah RASPI_CH di STM juga.
-LORA_CFG = bytes([0x00, 0x00, 0x62, 0x00, 0x41, 0x03])
+LORA_CFG = bytes([0x00, 0x00, 0x62, 0x00, 0x41, 0x43])
 
 # GPIO BCM numbering
 LORA_PIN_M0  = 23
