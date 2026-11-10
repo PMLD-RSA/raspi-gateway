@@ -87,6 +87,10 @@ def main() -> None:
                 if jarak_cm > 0:
                     node_info = syncer.get_node(device_code)
 
+                    # Alias otomatis jika STM32-ATB belum terdaftar tapi STM32-GED ada di database
+                    if not node_info and device_code == "STM32-ATB" and "STM32-GED" in syncer.mappings:
+                        node_info = syncer.mappings["STM32-GED"]
+
                     # Fallback jika STM32 masih mengirim format lama (DEFAULT)
                     if not node_info and device_code == "DEFAULT" and syncer.mappings:
                         # Ambil node pertama (misal: STM32-ATA)
