@@ -31,10 +31,21 @@ from config import (
 class E220:
     """Driver tingkat rendah untuk modul LoRa Ebyte E220."""
 
-    def __init__(self):
-        self._m0  = DigitalOutputDevice(LORA_PIN_M0)
-        self._m1  = DigitalOutputDevice(LORA_PIN_M1)
-        self._aux = DigitalInputDevice(LORA_PIN_AUX, pull_up=None, active_state=True)
+    def __init__(self, use_gpio: bool = False):
+        self.use_gpio = use_gpio
+        self._m0 = None
+        self._m1 = None
+        self._aux = None
+
+        if self.use_gpio:
+            try:
+                self._m0  = DigitalOutputDevice(LORA_PIN_M0)
+                self._m1  = DigitalOutputDevice(LORA_PIN_M1)
+                self._aux = DigitalInputDevice(LORA_PIN_AUX, pull_up=None, active_state=True)
+            except Exception as e:
+                print(f"[E220] GPIO dinonaktifkan: {e}")
+                self.use_gpio = False
+
         self._ser: serial.Serial | None = None
 
     # ------------------------------------------------------------------
@@ -42,11 +53,11 @@ class E220:
     # ------------------------------------------------------------------
 
     def tunggu_aux(self, timeout: float = 2.0) -> bool:
-        """Tunggu sampai pin AUX HIGH (modul idle).
+        """Tunggu sampai pin AUX HIGH (modul idle)."""
+        if not self.use_gpio or self._aux is None:
+            time.sleep(0.01)
+            return True
 
-        AUX LOW berarti modul sedang memproses data / konfigurasi.
-        Mengembalikan False jika timeout terlampaui.
-        """
         t0 = time.monotonic()
         while not self._aux.value:
             if time.monotonic() - t0 > timeout:
@@ -57,15 +68,10 @@ class E220:
         return True
 
     def set_mode(self, m0: int, m1: int) -> None:
-        """Ganti mode operasi E220.
+        """Ganti mode operasi E220 jika GPIO terpasang."""
+        if not self.use_gpio or self._m0 is None or self._m1 is None:
+            return
 
-        Mode  M0  M1  Keterangan
-        ----  --  --  ----------
-        0     0   0   Transmisi normal (transparan / fixed)
-        1     1   0   WOR (Wake-on-Radio) pengirim
-        2     0   1   WOR penerima
-        3     1   1   Konfigurasi via UART / sleep
-        """
         self.tunggu_aux()
         self._m0.value = m0
         self._m1.value = m1
@@ -85,9 +91,12 @@ class E220:
         """Tutup port serial dan lepas GPIO."""
         if self._ser and self._ser.is_open:
             self._ser.close()
-        self._m0.close()
-        self._m1.close()
-        self._aux.close()
+        if self._m0:
+            self._m0.close()
+        if self._m1:
+            self._m1.close()
+        if self._aux:
+            self._aux.close()
 
     def __enter__(self) -> "E220":
         return self.buka()
@@ -100,10 +109,12 @@ class E220:
     # ------------------------------------------------------------------
 
     def konfigurasi(self) -> bool:
-        """Baca register E220, tulis permanen (C0) hanya jika berbeda.
-
-        Mengembalikan True jika modul merespons dengan benar.
+        """Baca register E220 jika GPIO aktif.
+        Jika GPIO tidak dipasang, modul diasumsikan sudah terkonfigurasi permanen.
         """
+        if not self.use_gpio:
+            print("[E220] Berjalan dalam mode 4-kabel (Normal Mode bawaan). Siap.")
+            return True
         if self._ser is None:
             raise RuntimeError("Port serial belum dibuka. Panggil buka() atau gunakan 'with'.")
 
