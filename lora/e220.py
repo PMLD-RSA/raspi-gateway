@@ -45,7 +45,7 @@ class E220:
             except Exception as e:
                 print(f"[E220] GPIO dinonaktifkan: {e}")
                 self.use_gpio = False
-
+    
         self._ser: serial.Serial | None = None
 
     # ------------------------------------------------------------------
