@@ -50,29 +50,48 @@ def parse_frame(baris: str) -> Optional[tuple[str, float, int, Optional[int]]]:
             pass
 
     # 2. Format Baru Transmitter: N<origin>,D<dist_mm>,S<seq>,H<hop>
-    if baris.startswith("N"):
+    # Catatan: Jika Packet RSSI aktif di E220, modul menambahkan 1 byte RSSI biner di akhir tiap paket.
+    # Terkadang saat dibaca serial per baris, byte RSSI dari paket sebelumnya menempel di depan paket berikutnya ('íN1,...')
+    idx_N = baris.find("N")
+    if idx_N != -1:
+        # Periksa apakah ada karakter RSSI di depan 'N'
+        rssi_val = None
+        if idx_N > 0:
+            prefix_char = baris[idx_N - 1]
+            raw_rssi = ord(prefix_char)
+            # Konversi byte RSSI EBYTE (0-255) ke dBm: -(256 - raw)
+            rssi_val = -(256 - raw_rssi) if raw_rssi > 127 else -raw_rssi
+
+        clean_baris = baris[idx_N:]
         try:
-            # Contoh: N1,D450,S12,H0
-            pD = baris.find(",D")
-            pS = baris.find(",S")
-            pH = baris.find(",H")
+            pD = clean_baris.find(",D")
+            pS = clean_baris.find(",S")
+            pH = clean_baris.find(",H")
 
             if pD > 0 and pS > pD and pH > pS:
-                origin_str = baris[1:pD]
-                dist_str   = baris[pD + 2:pS]
-                seq_str    = baris[pS + 2:pH]
-                # hop_str  = baris[pH + 2:]
+                origin_str = clean_baris[1:pD]
+                dist_str   = clean_baris[pD + 2:pS]
+                seq_str    = clean_baris[pS + 2:pH]
+                hop_raw    = clean_baris[pH + 2:]
 
-                # Cek jika ada trailing byte RSSI (jika RX modul mengaktifkan RSSI byte)
-                # Seringkali setelah hop ada newline atau byte biner RSSI
-                hop_part = baris[pH + 2:].split()[0]
-                
+                # Ekstrak angka hop (buang jika ada byte trailing RSSI di ujung hop)
+                hop_digits = ""
+                for char in hop_raw:
+                    if char.isdigit():
+                        hop_digits += char
+                    else:
+                        # Jika ada karakter biner RSSI di akhir paket
+                        if rssi_val is None:
+                            raw_r = ord(char)
+                            rssi_val = -(256 - raw_r) if raw_r > 127 else -raw_r
+                        break
+
                 device_code = origin_str.strip()
                 dist_mm     = float(dist_str.strip())
                 nomor_urut  = int(seq_str.strip())
 
-                jarak_cm = dist_mm / 10.0  # DYP-A01 mengeluarkan mm -> ubah ke cm
-                return device_code, jarak_cm, nomor_urut, None
+                jarak_cm = dist_mm / 10.0  # DYP-A01 mm -> cm
+                return device_code, jarak_cm, nomor_urut, rssi_val
         except (ValueError, IndexError):
             pass
 
