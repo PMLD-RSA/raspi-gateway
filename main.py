@@ -112,10 +112,13 @@ def main() -> None:
                     elif not node_info and device_code in ("2", "NODE_2", "N2"):
                         node_info = syncer.get_node("STM32-ATB") or syncer.get_node("STM32-GED")
                     elif not node_info and device_code in ("3", "NODE_3", "N3"):
+                        # Cek tangki ke-3 atau petakan ke node ke-2 database (STM32-GED) jika baru 2 tangki yang didaftarkan
                         node_info = (
                             syncer.get_node("STM32-ATC")
                             or syncer.get_node("STM32-BED")
                             or syncer.get_node("STM32-C01")
+                            or syncer.get_node("STM32-GED")
+                            or syncer.get_node("STM32-ATB")
                         )
 
                     # Alias otomatis jika STM32-ATB belum terdaftar tapi STM32-GED ada di database
