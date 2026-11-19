@@ -86,6 +86,8 @@ def main() -> None:
                 if baris is None:
                     continue
 
+                print(f"[DEBUG UART] Diterima mentah: {baris!r}")
+
                 hasil = parse_frame(baris)
                 if hasil is None:
                     print(f"[LoRa] Data tidak dikenal: {baris!r}")

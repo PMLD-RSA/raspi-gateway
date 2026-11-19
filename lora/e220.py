@@ -175,17 +175,13 @@ class E220:
     # ------------------------------------------------------------------
 
     def baca_baris(self) -> str | None:
-        """Baca satu baris ASCII dari UART.
-
-        Mengembalikan string yang sudah di-strip, atau None jika kosong /
-        timeout.
-        """
+        """Baca satu baris ASCII dari UART."""
         if self._ser is None:
             raise RuntimeError("Port serial belum dibuka.")
 
-        raw = self._ser.readline()
-        if not raw:
-            return None
-
-        baris = raw.decode("ascii", errors="replace").strip()
-        return baris if baris else None
+        if self._ser.in_waiting > 0:
+            raw = self._ser.readline()
+            if raw:
+                return raw.decode("latin-1", errors="replace").strip()
+        time.sleep(0.01)
+        return None
