@@ -58,28 +58,23 @@ TANK_CAPACITY_LITERS = 200   # kapasitas penuh tangki (liter)
 # LoRa E220-900T22D  —  terikat hardware, hardcode
 # =============================================================================
 
-LORA_SERIAL_PORT = "/dev/serial0"   # UART0 Raspberry Pi
-LORA_BAUD        = 9600
+# Port serial penerima:
+# - "/dev/serial0" : jika modul LoRa E220 terhubung langsung ke pin GPIO Raspberry Pi (UART0).
+# - "/dev/ttyUSB0" atau "/dev/ttyACM0" : jika menggunakan STM32 RX Hub via kabel USB.
+LORA_SERIAL_PORT = os.getenv("LORA_SERIAL_PORT", "/dev/serial0")
+LORA_BAUD        = int(os.getenv("LORA_BAUD", "9600"))
 
-# Register E220 — 6 byte: ADDH ADDL REG0 REG1 REG2 REG3
-# Harus sama persis dengan konfigurasi STM32 (pengirim)!
+# Register E220 — 8 byte: ADDH ADDL REG0 REG1 REG2 REG3 CRYPT_H CRYPT_L
+# Sesuai RF Setting Tool EBYTE (gambar konfigurasi lokal):
+# Parameter: 0xc0 0x00 0x08 0x01 0x03 0x62 0x62 0x19 0x88 0x00 0x00
 #
-#   ADDH 0x00, ADDL 0x00 → alamat modul 0x0000
-#   REG0 0x62             → UART 9600 bps, 8N1, air rate 2.4 kbps
-#   REG1 0x00             → TX power 22 dBm (maksimal, sudah aman dengan antena 915 MHz)
-#                           [0x00 = 22 dBm, 0x01 = 17 dBm, 0x02 = 13 dBm, 0x03 = 10 dBm]
-#   REG2: Channel frekuensi (Frekuensi = 850.125 MHz + Channel * 1 MHz)
-#         - 0x41 (CH 65) → 850.125 + 65 = 915.125 MHz (Center 915 MHz)
-#         - 0x48 (CH 72) → 850.125 + 72 = 922.125 MHz (Standar AS923 / Regulasi ISM Indonesia)
-#   REG3 0x43             → mode fixed transmission, LBT OFF, WOR 2000ms
-#
-# Default diset ke 0x41 (915.125 MHz) sesuai antena 915 MHz. Jika node STM32 memakai 922.125 MHz, ganti byte ke-5 menjadi 0x48.
-#
-# Topologi dengan relay (lihat STM32-Sensor/src/main.cpp):
-#   STM node (CH 0x42) -> STM relay (0x0001, CH 0x42) -> Raspi (0x0000, CH 0x41)
-# STM memakai mode fixed transmission dan mengirim ke alamat 0x0000 CH 0x41,
-# jadi Raspi tetap transparan. Kalau CH Raspi diganti, ubah RASPI_CH di STM juga.
-LORA_CFG = bytes([0x00, 0x00, 0x62, 0x00, 0x41, 0x43])
+#   ADDH 0x01, ADDL 0x03 → Address = 259 (0x0103)
+#   REG0 0x62             → UART 9600 bps, 8N1, Air rate 2.4 kbps
+#   REG1 0x62             → Sub-packet 128 bytes, RSSI ambient noise, Power 13 dBm
+#   REG2 0x19             → Channel 25 (0x19) -> 435.125 MHz (atau 850.125 + 25 = 875.125 MHz)
+#   REG3 0x88             → Enable Packet RSSI Byte (bit 7), Normal Transparent Mode (bit 6=0), WOR 500ms
+#   CRYPT_H 0x00, CRYPT_L 0x00 → Key = 0
+LORA_CFG = bytes([0x01, 0x03, 0x62, 0x62, 0x19, 0x88, 0x00, 0x00])
 
 # GPIO BCM numbering
 LORA_PIN_M0  = 23

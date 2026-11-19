@@ -78,12 +78,23 @@ class GatewaySyncer:
                 except (ValueError, TypeError):
                     kapasitas_float = 200.0
 
+                min_dist = item.get("minDistanceCm", 30.0)
+                max_dist = item.get("maxDistanceCm", 350.0)
+                try:
+                    min_dist_float = float(min_dist)
+                    max_dist_float = float(max_dist)
+                except (ValueError, TypeError):
+                    min_dist_float = 30.0
+                    max_dist_float = 350.0
+
                 self.mappings[device_code] = {
                     "deviceCode": device_code,
                     "sensorNodeId": item.get("sensorNodeId"),
                     "tankId": item.get("tankId"),
                     "tankName": item.get("tankName", "Tangki"),
                     "capacityLiters": kapasitas_float,
+                    "minDistanceCm": min_dist_float,
+                    "maxDistanceCm": max_dist_float,
                 }
 
     def _save_cache(self, data: dict[str, Any]) -> None:

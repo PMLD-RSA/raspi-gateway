@@ -19,6 +19,7 @@ Persiapan sekali saja di Raspberry Pi:
 """
 
 import time
+import threading
 
 import serial
 
@@ -52,6 +53,21 @@ def main() -> None:
     mqtt = MQTTPublisher()
     mqtt.connect()
 
+    # Heartbeat periodik gateway ke backend via MQTT (setiap 30 detik)
+    def heartbeat_loop():
+        while True:
+            time.sleep(30)
+            if mqtt.is_connected:
+                hb_payload = {
+                    "device_code": GATEWAY_CODE,
+                    "type": "gateway",
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
+                }
+                mqtt.publish(hb_payload, topic="hospital/gateway/heartbeat")
+
+    hb_thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    hb_thread.start()
+
     # ------------------------------------------------------------------
     # 3. LoRa E220 — konfigurasi & loop terima data
     # ------------------------------------------------------------------
@@ -75,17 +91,30 @@ def main() -> None:
                     print(f"[LoRa] Data tidak dikenal: {baris!r}")
                     continue
 
-                device_code, jarak_cm, nomor_urut = hasil
+                device_code, jarak_cm, nomor_urut, rssi = hasil
 
                 teks_jarak = (
                     "tidak ada pantulan" if jarak_cm == 0
                     else f"{jarak_cm:.1f} cm"
                 )
-                print(f"[{time.strftime('%H:%M:%S')}] [{device_code}] Ukur #{nomor_urut}: {teks_jarak}")
+                teks_rssi = f" | RSSI: {rssi} dBm" if rssi is not None else ""
+                print(f"[{time.strftime('%H:%M:%S')}] [{device_code}] Ukur #{nomor_urut}: {teks_jarak}{teks_rssi}")
 
                 # Kirim ke MQTT hanya jika jarak valid (> 0)
                 if jarak_cm > 0:
                     node_info = syncer.get_node(device_code)
+
+                    # Alias otomatis jika Node ID numerik dari firmware baru (1, 2, atau 3)
+                    if not node_info and device_code in ("1", "NODE_1", "N1"):
+                        node_info = syncer.get_node("STM32-ATA")
+                    elif not node_info and device_code in ("2", "NODE_2", "N2"):
+                        node_info = syncer.get_node("STM32-ATB") or syncer.get_node("STM32-GED")
+                    elif not node_info and device_code in ("3", "NODE_3", "N3"):
+                        node_info = (
+                            syncer.get_node("STM32-ATC")
+                            or syncer.get_node("STM32-BED")
+                            or syncer.get_node("STM32-C01")
+                        )
 
                     # Alias otomatis jika STM32-ATB belum terdaftar tapi STM32-GED ada di database
                     if not node_info and device_code == "STM32-ATB" and "STM32-GED" in syncer.mappings:
@@ -106,6 +135,9 @@ def main() -> None:
                     sensor_node_id = node_info["sensorNodeId"]
                     capacity       = node_info.get("capacityLiters", 200.0)
 
+                    min_dist = node_info.get("minDistanceCm", 30.0)
+                    max_dist = node_info.get("maxDistanceCm", TANK_HEIGHT_CM)
+
                     payload = hitung_payload(
                         jarak_cm=jarak_cm,
                         nomor_urut=nomor_urut,
@@ -113,6 +145,9 @@ def main() -> None:
                         sensor_node_id=sensor_node_id,
                         tank_capacity_liters=capacity,
                         tank_height_cm=TANK_HEIGHT_CM,
+                        rssi=rssi,
+                        min_distance_cm=min_dist,
+                        max_distance_cm=max_dist,
                     )
 
                     topic = f"hospital/{tank_id}/level"
