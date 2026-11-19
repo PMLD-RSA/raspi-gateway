@@ -1,101 +1,105 @@
 #!/usr/bin/env python3
-"""Script satu kali jalan untuk mengatur register modul E220 ke Channel 25 secara permanen.
+"""Script satu kali jalan untuk mengatur register modul E220 ke Channel 25 secara bertahap.
 
-Konfigurasi sesuai EBYTE RF Setting Tool:
-- Header perintah: 0xC0 0x00 0x08 (Tulis permanen mulai register 0x00 sebanyak 8 byte)
-- Target parameter:
-    ADDH    : 0x01 (Address = 259)
-    ADDL    : 0x03
-    REG0    : 0x62 (UART 9600 8N1, Air Rate 2.4 kbps)
-    REG1    : 0x62 (128 bytes, Channel RSSI Enable, Power 13 dBm)
-    REG2    : 0x19 (Channel 25)
-    REG3    : 0x88 (Packet RSSI Enable, Normal Mode, WOR 500ms)
-    CRYPT_H : 0x00
-    CRYPT_L : 0x00
-
-Cara Pakai:
-1. Pasang kabel M0 (Pin 16 / GPIO23) dan M1 (Pin 18 / GPIO24).
-   (Jika ada kabel AUX, pasang ke Pin 22 / GPIO25).
-2. Jalankan: python set_channel25.py
-3. Setelah tertulis OK, lepas kembali kabel M0 dan M1 (kembali ke mode 4-kabel).
-4. Jalankan: python main.py
+Mengatasi respon 'FF FF FF':
+1. Menunggu settling time pin AUX & reset buffer serial.
+2. Mencoba menulis dengan perintah C0 (permanen) per blok kecil (Channel saja dan full).
+3. Jika modul menolak 8-byte sekaligus karena format register E220 versi 6-byte,
+   akan dicoba varian 6-byte yang didukung.
 """
 
 import time
 import serial
-
-# Target konfigurasi 8 byte
-TARGET_CFG = bytes([0x01, 0x03, 0x62, 0x62, 0x19, 0x88, 0x00, 0x00])
+from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
 def main():
-    print("=" * 60)
-    print(" PROGRAM SETTING PERMANEN E220 KE CHANNEL 25 (EBYTE)")
-    print("=" * 60)
+    print("=" * 65)
+    print(" PROGRAM SETTING REGISTER E220 KE CHANNEL 25 (EBYTE)")
+    print("=" * 65)
 
-    # Coba gunakan GPIO jika pin terpasang
-    try:
-        from gpiozero import DigitalInputDevice, DigitalOutputDevice
-        m0 = DigitalOutputDevice(23)
-        m1 = DigitalOutputDevice(24)
-        has_gpio = True
-        print("[GPIO] Mengatur pin M0=1, M1=1 (Mode Konfigurasi)...")
-        m0.value = 1
-        m1.value = 1
-        time.sleep(0.15)
-    except Exception as e:
-        has_gpio = False
-        print(f"[GPIO] Tidak mendeteksi GPIO ({e}). Pastikan pin M0 & M1 terhubung ke HIGH (3.3V).")
+    m0 = DigitalOutputDevice(23)
+    m1 = DigitalOutputDevice(24)
+    aux = DigitalInputDevice(25, pull_up=None, active_state=True)
+
+    print("[1] Memasuki mode konfigurasi (M0=1, M1=1)...")
+    m0.value = 1
+    m1.value = 1
+    time.sleep(0.15)
+
+    # Tunggu AUX HIGH
+    t0 = time.monotonic()
+    while not aux.value:
+        if time.monotonic() - t0 > 2.0:
+            print("    (AUX timeout, lanjut...)")
+            break
+        time.sleep(0.01)
+    time.sleep(0.05)
+
+    def kirim_perintah(ser, label, cmd):
+        time.sleep(0.05)
+        # Tunggu AUX
+        t_start = time.monotonic()
+        while not aux.value:
+            if time.monotonic() - t_start > 1.5:
+                break
+            time.sleep(0.005)
+        time.sleep(0.02)
+
+        ser.reset_input_buffer()
+        ser.write(cmd)
+        # Respons E220 adalah: Header balasan (C1) + Addr + Len + Data
+        expected_len = 3 + cmd[2]
+        resp = ser.read(expected_len)
+        sukses = len(resp) == expected_len and resp[0] == 0xC1
+        status = "OK" if sukses else f"GAGAL ({resp.hex(' ') or 'kosong'})"
+        print(f"    {label:<32} -> {status}")
+        return sukses, resp
 
     with serial.Serial("/dev/serial0", 9600, timeout=1.5) as ser:
-        ser.reset_input_buffer()
+        print("\n[2] Membaca konfigurasi modul...")
+        ok, resp = kirim_perintah(ser, "Baca 8 Register", bytes([0xC1, 0x00, 0x08]))
+        if ok:
+            print(f"    Data saat ini : {resp[3:].hex(' ')}")
+            print(f"    Channel lama  : {resp[3+4]} (0x{resp[3+4]:02X})")
 
-        # 1. Baca register saat ini
-        print("\n[1] Membaca register saat ini...")
-        ser.write(bytes([0xC1, 0x00, 0x08]))
-        resp = ser.read(11)
+        print("\n[3] Mencoba menulis Channel 25 (0x19)...")
+        # Strategi A: Tulis hanya Channel (Register 0x04, panjang 1 byte, nilai 0x19)
+        # C0 04 01 19
+        ok_ch, _ = kirim_perintah(ser, "Tulis Channel Saja (0x19)", bytes([0xC0, 0x04, 0x01, 0x19]))
 
-        if len(resp) == 11 and resp[0] == 0xC1:
-            curr_cfg = resp[3:]
-            print(f"    Register terbaca  : {curr_cfg.hex(' ')}")
-            print(f"    Channel sekarang  : {curr_cfg[4]} (0x{curr_cfg[4]:02X})")
-        else:
-            print(f"    Gagal membaca register (respons={resp.hex(' ') or 'kosong'}).")
-            print("    TIPS: Pastikan pin M0 dan M1 terhubung ke 3.3V saat menjalankan script ini.")
+        # Strategi B: Tulis Address (Register 0x00, panjang 2 byte, nilai 0x01 0x03)
+        ok_addr, _ = kirim_perintah(ser, "Tulis Address Saja (259)", bytes([0xC0, 0x00, 0x02, 0x01, 0x03]))
 
-        # 2. Tulis parameter permanen (C0)
-        print("\n[2] Menulis konfigurasi Channel 25 (0xC0)...")
-        cmd_write = bytes([0xC0, 0x00, 0x08]) + TARGET_CFG
-        ser.write(cmd_write)
-        resp_write = ser.read(11)
+        # Strategi C: Tulis 6-byte standar
+        # 0x01 0x03 0x62 0x62 0x19 0x88
+        cfg_6byte = bytes([0x01, 0x03, 0x62, 0x62, 0x19, 0x88])
+        ok_6b, _ = kirim_perintah(ser, "Tulis 6-Byte Konfigurasi", bytes([0xC0, 0x00, 0x06]) + cfg_6byte)
 
-        if len(resp_write) == 11 and resp_write[0] == 0xC1:
-            print("    ✓ SUKSES! Konfigurasi berhasil disimpan permanen ke EEPROM.")
-            print(f"    Data tersimpan: {resp_write[3:].hex(' ')}")
-        else:
-            print(f"    ✗ Gagal menulis (respons={resp_write.hex(' ') or 'kosong'}).")
+        # Strategi D: Tulis 8-byte lengkap
+        cfg_8byte = bytes([0x01, 0x03, 0x62, 0x62, 0x19, 0x88, 0x00, 0x00])
+        ok_8b, _ = kirim_perintah(ser, "Tulis 8-Byte Lengkap", bytes([0xC0, 0x00, 0x08]) + cfg_8byte)
 
-        # 3. Verifikasi ulang pembacaan
-        print("\n[3] Memverifikasi hasil...")
-        ser.reset_input_buffer()
-        ser.write(bytes([0xC1, 0x00, 0x08]))
-        resp_cek = ser.read(11)
-        if len(resp_cek) == 11 and resp_cek[3:] == TARGET_CFG:
-            print("    ✓ VERIFIKASI BERHASIL 100%! Modul E220 kini berada di Channel 25.")
-        else:
-            print(f"    Hasil verifikasi: {resp_cek[3:].hex(' ') if len(resp_cek) == 11 else 'gagal'}")
+        print("\n[4] Membaca hasil akhir...")
+        ok_verif, resp_verif = kirim_perintah(ser, "Verifikasi 8 Register", bytes([0xC1, 0x00, 0x08]))
+        if ok_verif:
+            ch_baru = resp_verif[3+4]
+            addr_baru = (resp_verif[3] << 8) | resp_verif[4]
+            print("\n" + "-" * 50)
+            print(f" HASIL AKHIR REGISTER : {resp_verif[3:].hex(' ')}")
+            print(f" ADDRESS TERBACA      : {addr_baru} (0x{addr_baru:04X})")
+            print(f" CHANNEL TERBACA      : {ch_baru} (0x{ch_baru:02X})")
+            print("-" * 50)
+            if ch_baru == 25:
+                print(" ✓ SUKSES BESAR! Modul E220 Anda resmi berpindah ke CHANNEL 25!")
+            else:
+                print(" ! Catatan: Channel belum berubah ke 25.")
 
-    # Kembalikan pin ke mode normal jika pakai GPIO
-    if has_gpio:
-        m0.value = 0
-        m1.value = 0
-        m0.close()
-        m1.close()
-        print("\n[GPIO] Pin M0 & M1 telah dikembalikan ke LOW (Mode Normal).")
-
-    print("\n" + "=" * 60)
-    print(" SELESAI. Lepas kembali kabel M0 dan M1, lalu jalankan:")
-    print(" python main.py")
-    print("=" * 60)
+    m0.value = 0
+    m1.value = 0
+    m0.close()
+    m1.close()
+    aux.close()
+    print("\n[5] Pin GPIO dikembalikan ke Mode Normal (M0=0, M1=0). Selesai.")
 
 if __name__ == "__main__":
     main()
